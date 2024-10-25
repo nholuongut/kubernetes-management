@@ -1,0 +1,51 @@
+ingress:
+  enabled: true
+  className: public-nginx
+  annotations:
+    "cert-manager.io/cluster-issuer": "letsencrypt-prod"
+    "nginx.ingress.kubernetes.io/ssl-redirect": "true"
+  hosts:
+    - host: reports.jenkins.io
+      paths:
+        - path: /
+  tls:
+    - secretName: reports-tls
+      hosts:
+        - reports.jenkins.io
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+htmlVolume:
+  azureFile:
+    secretName: reports
+    shareName: reports
+    readOnly: true
+
+replicaCount: 2
+
+# Specify the "hard" scheduling constraints
+nodeSelector:
+  # arm64 is cheaper than x86
+  kubernetes.io/arch: arm64
+
+tolerations:
+  - key: "kubernetes.io/arch"
+    operator: "Equal"
+    value: "arm64"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: "app.kubernetes.io/name"
+              operator: In
+              values:
+                - reports
+        topologyKey: "kubernetes.io/hostname"

@@ -1,0 +1,111 @@
+global:
+  ingress:
+    enabled: true
+    className: public-nginx
+    annotations:
+      "cert-manager.io/cluster-issuer": "letsencrypt-prod"
+      "nginx.ingress.kubernetes.io/ssl-redirect": "true"
+      "nginx.ingress.kubernetes.io/use-regex": "true"  # Required to allow regexp path matching with Nginx
+    hosts:
+      - host: azure.updates.jenkins.io
+        paths:
+          - path: /
+            backendService: httpd
+          - path: /.*[.](json|html|txt)$  # Requires the regexp engine of Nginx to be enabled
+            pathType: ImplementationSpecific
+            backendService: mirrorbits
+    tls:
+      - secretName: updates-jenkins-io-tls
+        hosts:
+          - azure.updates.jenkins.io
+
+  storage:
+    enabled: true
+    claimNameTpl: '{{ include "mirrorbits-parent.pvc-name" $ }}'
+    storageClassName: azurefile-csi-premium
+    storageSize: 2Gi  # See file share size in https://github.com/jenkins-infra/azure/blob/main/updates.jenkins.io.tf
+    accessModes:
+      - ReadOnlyMany
+    persistentVolume:
+      azureFile:
+        resourceGroup: updates-jenkins-io
+        shareName: updates-jenkins-io
+        readOnly: true
+      additionalSpec:
+        persistentVolumeReclaimPolicy: Retain
+        mountOptions:
+          - dir_mode=0755
+          - file_mode=0644
+          - uid=1000
+          - gid=1000
+          - mfsymlinks
+          - nobrl
+          - serverino
+          - cache=strict
+
+mirrorbits-lite:
+  enabled: true
+  resources:
+    limits:
+      cpu: 2
+      memory: 2048Mi
+    requests:
+      cpu: 500m
+      memory: 500Mi
+  nodeSelector:
+    kubernetes.io/arch: amd64
+
+httpd:
+  enabled: true
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2048Mi
+    requests:
+      cpu: 200m
+      memory: 500Mi
+  nodeSelector:
+    kubernetes.io/arch: arm64
+  tolerations:
+    - key: "kubernetes.io/arch"
+      operator: "Equal"
+      value: "arm64"
+      effect: "NoSchedule"
+
+rsyncd:
+  enabled: true
+  configuration:
+    components:
+      - name: jenkins
+        path: /rsyncd/data/jenkins
+        comment: "Jenkins Read-Only Mirror"
+        volumeTpl: '{{ include "mirrorbits-parent.pvc-name" . }}'
+  podSecurityContext:
+    runAsUser: 65534  # User 'nobody'
+    runAsGroup: 65534  # Group 'nogroup'
+    runAsNonRoot: true
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+  nodeSelector:
+    kubernetes.io/arch: arm64
+  tolerations:
+    - key: "kubernetes.io/arch"
+      operator: "Equal"
+      value: "arm64"
+      effect: "NoSchedule"
+
+serviceaccount:
+  enabled: true

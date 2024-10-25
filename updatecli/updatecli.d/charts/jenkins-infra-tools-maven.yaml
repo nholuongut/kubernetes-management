@@ -1,0 +1,66 @@
+---
+name: Bump Maven version (Jenkins tools) on infra.ci.jenkins.io
+
+scms:
+  default:
+    kind: github
+    spec:
+      user: "{{ .github.user }}"
+      email: "{{ .github.email }}"
+      owner: "{{ .github.owner }}"
+      repository: "{{ .github.repository }}"
+      token: "{{ requiredEnv .github.token }}"
+      username: "{{ .github.username }}"
+      branch: "{{ .github.branch }}"
+
+sources:
+  getDeployedPackerImageVersion:
+    kind: file
+    name: Retrieve the current version of the Packer images used in production
+    spec:
+      file: ./config/jenkins_infra.ci.jenkins.io.yaml
+    transformers:
+      - findsubmatch:
+          pattern: 'galleryImageVersion:\s"(.*)"'
+          captureindex: 1
+  getMavenVersionFromPackerImages:
+    kind: file
+    name: Get the latest Maven version set in packer-images
+    dependson:
+      - getDeployedPackerImageVersion
+    spec:
+      file: https://raw.githubusercontent.com/jenkins-infra/packer-images/{{ source "getDeployedPackerImageVersion" }}/provisioning/tools-versions.yml
+      matchpattern: 'maven_version:\s(.*)'
+    transformers:
+      - findsubmatch:
+          pattern: 'maven_version:\s(.*)'
+          captureindex: 1
+
+conditions:
+  checkIfReleaseIsAvailable:
+    kind: shell
+    disablesourceinput: true
+    spec:
+      command: curl --connect-timeout 5 --location --head --fail --silent --show-error https://archive.apache.org/dist/maven/maven-3/{{ source `getMavenVersionFromPackerImages` }}/binaries/apache-maven-{{ source `getMavenVersionFromPackerImages` }}-bin.tar.gz
+
+targets:
+  setMavenToolVersion:
+    name: "Bump Maven tool version on infra.ci.jenkins.io"
+    kind: file
+    sourceid: getMavenVersionFromPackerImages
+    spec:
+      file: config/jenkins_infra.ci.jenkins.io.yaml
+      matchpattern: '- maven:((\r\n|\r|\n)(\s+))id: .*'
+      replacepattern: '- maven:${1}id: "{{ source "getMavenVersionFromPackerImages" }}"'
+    scmid: default
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: default
+    title: Bump Maven version (Jenkins tools) on infra.ci.jenkins.io to {{ source "getMavenVersionFromPackerImages" }}
+    spec:
+      labels:
+        - dependencies
+        - maven
+        - infra.ci.jenkins.io

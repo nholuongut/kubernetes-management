@@ -1,0 +1,58 @@
+name: Bump `404` docker image version
+
+scms:
+  default:
+    kind: github
+    spec:
+      user: "{{ .github.user }}"
+      email: "{{ .github.email }}"
+      owner: "{{ .github.owner }}"
+      repository: "{{ .github.repository }}"
+      token: "{{ requiredEnv .github.token }}"
+      username: "{{ .github.username }}"
+      branch: "{{ .github.branch }}"
+
+sources:
+  latestRelease:
+    kind: githubrelease
+    name: "Get latest jenkins-infra/docker-404 release"
+    spec:
+      owner: "jenkins-infra"
+      repository: "docker-404"
+      token: "{{ requiredEnv .github.token }}"
+      username: "{{ .github.username }}"
+
+conditions:
+  checkDockerImagePublished:
+    name: "Test jenkinsciinfra/404:<latest_version> docker image tag"
+    kind: dockerimage
+    spec:
+      image: "jenkinsciinfra/404"
+      ## Tag from source
+      architecture: amd64
+
+targets:
+  updatePrivateNginxIngress404:
+    name: "Update 404 docker image tag"
+    kind: yaml
+    spec:
+      file: "config/private-nginx-ingress__common.yaml"
+      key: "defaultBackend.image.tag"
+    scmid: default
+  updatePublicNginxIngress404:
+    name: "Update 404 docker image tag"
+    kind: yaml
+    spec:
+      file: "config/public-nginx-ingress__common.yaml"
+      key: "defaultBackend.image.tag"
+    scmid: default
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: default
+    title: Bump 404 docker image version to {{ source "latestRelease" }}
+    spec:
+      labels:
+        - dependencies
+        - docker-404

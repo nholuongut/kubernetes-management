@@ -1,0 +1,51 @@
+name: "Bump Jenkins LTS docker image version"
+
+scms:
+  default:
+    kind: github
+    spec:
+      user: "{{ .github.user }}"
+      email: "{{ .github.email }}"
+      owner: "{{ .github.owner }}"
+      repository: "{{ .github.repository }}"
+      token: "{{ requiredEnv .github.token }}"
+      username: "{{ .github.username }}"
+      branch: "{{ .github.branch }}"
+
+sources:
+  latestRelease:
+    name: "Get latest jenkins-lts version"
+    kind: githubrelease
+    spec:
+      owner: "jenkins-infra"
+      repository: "docker-jenkins-lts"
+      token: "{{ requiredEnv .github.token }}"
+      username: "{{ .github.username }}"
+
+conditions:
+  checkDockerImagePublished:
+    name: "Test jenkinsciinfra/jenkins-lts:<latest_version> docker image tag"
+    kind: dockerimage
+    spec:
+      image: "jenkinsciinfra/jenkins-lts"
+      ## Tag from source
+      architecture: amd64
+
+targets:
+  updateReleaseInConfig:
+    name: "Update jenkinsciinfra/jenkins-lts docker image tag"
+    kind: yaml
+    spec:
+      file: "config/jenkins_release.ci.jenkins.io.yaml"
+      key: "controller.tag"
+    scmid: default
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: default
+    title: Bump Jenkins LTS docker image version to {{ source "latestRelease" }}
+    spec:
+      labels:
+        - dependencies
+        - jenkins-lts

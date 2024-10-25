@@ -1,0 +1,56 @@
+ingress:
+  enabled: true
+  className: public-nginx
+  annotations:
+    "cert-manager.io/cluster-issuer": "letsencrypt-prod"
+    "nginx.ingress.kubernetes.io/ssl-redirect": "true"
+  hosts:
+    - host: javadoc.jenkins.io
+      paths:
+        - path: /
+    - host: javadoc.jenkins-ci.org
+      paths:
+        - path: /
+  tls:
+    - secretName: javadoc-tls
+      hosts:
+        - javadoc.jenkins.io
+        - javadoc.jenkins-ci.org
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+htmlVolume:
+  azureFile:
+    secretName: javadoc
+    shareName: javadoc
+    readOnly: true
+
+replicaCount: 2
+
+# Specify the "hard" scheduling constraints
+nodeSelector:
+  # Ensure ARM64 is used to decrease cloud bill (instead of using `amd64`
+  kubernetes.io/arch: arm64
+
+# Tolerates to run on tainted `arm64` nodes
+tolerations:
+  - key: "kubernetes.io/arch"
+    operator: "Equal"
+    value: "arm64"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: "app.kubernetes.io/name"
+              operator: In
+              values:
+                - javadoc
+        topologyKey: "kubernetes.io/hostname"

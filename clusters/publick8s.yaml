@@ -1,0 +1,254 @@
+helmDefaults:
+  atomic: true
+  force: false
+  timeout: 300
+  wait: true
+repositories:
+  # https://github.com/DataDog/helm-charts/
+  - name: datadog
+    url: https://helm.datadoghq.com
+  # https://github.com/falcosecurity/charts/
+  - name: falco
+    url: https://falcosecurity.github.io/charts
+  # https://github.com/kubernetes/ingress-nginx/
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+  # https://github.com/jenkinsci/helm-charts/
+  - name: jenkins
+    url: https://charts.jenkins.io
+  # https://github.com/jenkins-infra/helm-charts/
+  - name: jenkins-infra
+    url: https://jenkins-infra.github.io/helm-charts
+  # https://github.com/cert-manager/cert-manager/
+  - name: jetstack
+    url: https://charts.jetstack.io
+  # https://github.com/codecentric/helm-charts/
+  - name: codecentric
+    url: https://codecentric.github.io/helm-charts
+releases:
+  - name: datadog
+    namespace: datadog
+    chart: datadog/datadog
+    version: 3.50.2
+    values:
+      - "../config/datadog.yaml.gotmpl"
+      - "../config/datadog_publick8s.yaml"
+      - "../config/datadog_confd_checksd.yaml"
+    secrets:
+      - "../secrets/config/datadog/publick8s-secrets.yaml"
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.13.3
+    set:
+      - name: installCRDs
+        value: true
+    values:
+      - "../config/cert-manager_publick8s.yaml"
+  - name: acme
+    namespace: cert-manager
+    chart: jenkins-infra/acme
+    version: 0.1.3
+    needs:
+      - cert-manager
+    values:
+      - "../config/acme.yaml"
+    secrets:
+      - "../secrets/config/acme/secrets.yaml"
+  - name: public-nginx-ingress
+    namespace: public-nginx-ingress
+    chart: ingress-nginx/ingress-nginx
+    version: 4.9.0
+    values:
+      - "../config/public-nginx-ingress__common.yaml"
+      - "../config/public-nginx-ingress_publick8s.yaml"
+  - name: private-nginx-ingress
+    namespace: private-nginx-ingress
+    chart: ingress-nginx/ingress-nginx
+    version: 4.9.0
+    values:
+      - "../config/private-nginx-ingress__common.yaml"
+      - "../config/private-nginx-ingress_publick8s.yaml"
+  - name: falco
+    namespace: falco
+    chart: falco/falco
+    version: 3.8.7
+    values:
+      - "../config/falco.yaml"
+  - name: artifact-caching-proxy
+    namespace: artifact-caching-proxy
+    chart: jenkins-infra/artifact-caching-proxy
+    version: 0.16.1
+    needs:
+      - public-nginx-ingress/public-nginx-ingress # Required to expose the proxy
+    values:
+      - "../config/artifact-caching-proxy__common.yaml"
+      - "../config/artifact-caching-proxy_azure.yaml"
+    secrets:
+      - "../secrets/config/artifact-caching-proxy/secrets.yaml"
+  - name: jenkins-weekly
+    namespace: jenkins-weekly
+    chart: jenkins/jenkins
+    version: 4.11.2
+    needs:
+      - public-nginx-ingress/public-nginx-ingress # Required to expose both the UI and the webhooks endpoint
+    values:
+      - "../config/jenkins_weekly.ci.jenkins.io.yaml"
+    secrets:
+      - "../secrets/config/weekly.ci.jenkins.io/jenkins-secrets.yaml"
+  - name: javadoc
+    namespace: javadoc
+    chart: jenkins-infra/javadoc
+    version: 0.4.0
+    values:
+      - "../config/javadoc.yaml"
+    secrets:
+      - "../secrets/config/javadoc/secrets.yaml"
+  - name: jenkinsisthewayio-redirect
+    namespace: jenkinsisthewayio-redirector
+    chart: jenkins-infra/httpredirector
+    version: 0.3.1
+    needs:
+      - public-nginx-ingress/public-nginx-ingress # Required to expose both the UI and the webhooks endpoint
+    values:
+      - "../config/jenkinsisthewayio.yaml"
+  - name: wiki
+    namespace: wiki
+    chart: jenkins-infra/wiki
+    version: 0.6.16
+    values:
+      - "../config/wiki.yaml"
+  - name: ldap
+    namespace: ldap
+    chart: jenkins-infra/ldap
+    version: 0.3.0
+    timeout: 600
+    values:
+      - "../config/ldap.yaml"
+    secrets:
+      - "../secrets/config/ldap/secrets.yaml"
+  - name: keycloak # Admin: https://admin.accounts.jenkins.io/auth/admin
+    namespace: keycloak
+    chart: codecentric/keycloak
+    version: 18.4.4
+    timeout: 600
+    values:
+      - "../config/keycloak.yaml"
+    needs:
+      - ldap/ldap
+    secrets:
+      ## TODO: delete db.yaml once fully migrated
+      #- "../secrets/config/keycloak/db.yaml"
+      - "../secrets/config/keycloak/public-db.yaml"
+      - "../secrets/config/keycloak/http.yaml"
+  - name: plugin-health-scoring
+    namespace: plugin-health-scoring
+    chart: jenkins-infra/plugin-health-scoring
+    version: 2.3.4
+    needs:
+      - public-nginx-ingress/public-nginx-ingress # Required to expose the service
+    values:
+      - "../config/plugin-health-scoring.yaml"
+    secrets:
+      - "../secrets/config/plugin-health-scoring/secrets.yaml"
+  - name: incrementals-publisher
+    namespace: incrementals-publisher
+    chart: jenkins-infra/incrementals-publisher
+    version: 0.6.5
+    values:
+      - "../config/incrementals-publisher.yaml"
+    secrets:
+      - "../secrets/config/incrementals-publisher/secrets.yaml"
+  - name: rating
+    namespace: rating
+    chart: jenkins-infra/rating
+    version: 0.3.6
+    values:
+      - "../config/rating.yaml"
+    secrets:
+      - "../secrets/config/rating/secrets.yaml"
+  - name: uplink
+    namespace: uplink
+    chart: jenkins-infra/uplink
+    version: 0.3.3
+    timeout: 600
+    values:
+      - "../config/uplink.yaml"
+    secrets:
+      - "../secrets/config/uplink/secrets.yaml"
+  - name: reports
+    namespace: reports
+    chart: jenkins-infra/reports
+    version: 0.4.0
+    values:
+      - "../config/reports.yaml"
+    secrets:
+      - "../secrets/config/reports/secrets.yaml"
+  - name: accountapp
+    namespace: accountapp
+    chart: jenkins-infra/accountapp
+    version: 0.8.35
+    needs:
+      - ldap/ldap
+    values:
+      - "../config/accountapp.yaml"
+    secrets:
+      - "../secrets/config/accountapp/secrets.yaml"
+  - name: mirrorbits
+    namespace: mirrorbits
+    chart: jenkins-infra/mirrorbits
+    version: 1.1.17
+    timeout: 600
+    atomic: false
+    values:
+      - "../config/mirrorbits.yaml"
+    secrets:
+      - "../secrets/config/mirrorbits/secrets.yaml"
+  - name: plugin-site-issues
+    namespace: plugin-site
+    chart: jenkins-infra/plugin-site-issues
+    version: 0.2.1
+    values:
+      - "../config/plugin-site-issues.yaml"
+    secrets:
+      - "../secrets/config/plugin-site-issues/secrets.yaml"
+  - name: plugin-site
+    namespace: plugin-site
+    chart: jenkins-infra/plugin-site
+    version: 0.4.4
+    values:
+      - "../config/plugin-site.yaml"
+    secrets:
+      - "../secrets/config/plugin-site/secrets.yaml"
+  - name: jenkinsio
+    namespace: jenkinsio
+    chart: jenkins-infra/jenkinsio
+    version: 1.1.0
+    values:
+      - "../config/jenkinsio.yaml"
+    secrets:
+      - "../secrets/config/jenkinsio/secrets.yaml"
+  - name: ipv6-lb-service
+    namespace: public-nginx-ingress
+    chart: jenkins-infra/ipv6-lb-service
+    version: 1.0.0
+    needs:
+      - public-nginx-ingress/public-nginx-ingress
+    values:
+      - "../config/ipv6-lb-service.yaml"
+  - name: updates-jenkins-io
+    namespace: updates-jenkins-io
+    chart: jenkins-infra/mirrorbits-parent
+    version: 1.1.14
+    values:
+      - "../config/updates.jenkins.io.yaml"
+    secrets:
+      - "../secrets/config/updates.jenkins.io/secrets.yaml"
+  - name: contributors-jenkins-io
+    namespace: contributors-jenkins-io
+    chart: jenkins-infra/nginx-website
+    version: 0.1.1
+    values:
+      - "../config/contributors.jenkins.io.yaml"
+    secrets:
+      - "../secrets/config/contributors.jenkins.io/secrets.yaml"
